@@ -1,21 +1,15 @@
-# Python virtual environment
-.venv/
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 
-# macOS Finder files
-.DS_Store
+# Virtual environment
+.venv/
+env/
+venv/
 
-# Environment variables and secrets
-.env
-
-# The cloned MCP servers repo
-servers/
-
-# VS Code settings (optional)
+# VSCode settings
 .vscode/
 
-# Log files (optional)
-*.log
+# Mac system files
+.DS_Store
