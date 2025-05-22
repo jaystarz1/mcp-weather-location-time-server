@@ -2,20 +2,23 @@ from fastapi import FastAPI
 from fastmcp import FastMCP
 import os
 
-# Import your MCP tool functions
+# Import your MCP tools
 from weather_mcp import get_weather
 from location_mcp import get_location
 from time_mcp import get_current_time
 
+# Initialize FastAPI app
 app = FastAPI()
+
+# Initialize FastMCP with the app
 mcp = FastMCP("weather-location-time-mcp", app=app)
 
-# Register your tools
+# Register MCP tools
 mcp.add_tool(get_weather)
 mcp.add_tool(get_location)
 mcp.add_tool(get_current_time)
 
-# Basic root endpoint for quick status check
+# Root endpoint for status check
 @app.get("/")
 def root():
     return {"status": "Weather/Location/Time MCP online!"}
@@ -27,4 +30,5 @@ def health():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
+    print(f"Starting MCP server on port {port}...")  # Confirm startup in logs
     mcp.run(transport="sse", host="0.0.0.0", port=port)
