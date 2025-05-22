@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastmcp import FastMCP
-import uvicorn
 import os
+import asyncio
+import uvicorn
 
 # Import MCP tools
 from weather_mcp import get_weather
@@ -11,7 +12,7 @@ from time_mcp import get_current_time
 # Initialize FastAPI app
 app = FastAPI()
 
-# Initialize MCP server
+# Initialize MCP server with FastAPI app
 mcp = FastMCP("weather-location-time-mcp", app=app)
 
 # Health check endpoints
@@ -28,7 +29,18 @@ mcp.add_tool(get_weather)
 mcp.add_tool(get_location)
 mcp.add_tool(get_current_time)
 
-# Run with uvicorn instead of mcp.run()
-if __name__ == "__main__":
+async def main():
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+
+    # Start MCP server event loop
+    serve_task = asyncio.create_task(mcp.serve())
+
+    # Configure and start Uvicorn server for FastAPI app
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
+    server = uvicorn.Server(config)
+
+    # Run both concurrently
+    await asyncio.gather(serve_task, server.serve())
+
+if __name__ == "__main__":
+    asyncio.run(main())
