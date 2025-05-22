@@ -14,7 +14,7 @@ app = FastAPI()
 # Initialize MCP server
 mcp = FastMCP("weather-location-time-mcp", app=app)
 
-# Health check endpoints - these will work now
+# Health check endpoints
 @app.get("/")
 def root():
     return {"status": "Weather/Location/Time MCP online!"}
@@ -28,7 +28,7 @@ mcp.add_tool(get_weather)
 mcp.add_tool(get_location)
 mcp.add_tool(get_current_time)
 
-# Use uvicorn to run instead of mcp.run()
+# Run with uvicorn instead of mcp.run()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
