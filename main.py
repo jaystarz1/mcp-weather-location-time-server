@@ -90,7 +90,4 @@ async def pack_for_weather(place: str, when: str = "now") -> dict:
     return suggestions
 
 if __name__ == "__main__":
-    import os
-    os.environ["HOST"] = "0.0.0.0"
-    os.environ["PORT"] = str(int(os.environ.get("PORT", 8000)))
-    mcp.run(transport="sse")
+   mcp.run(transport="sse", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
