@@ -4,14 +4,23 @@ import re
 import httpx
 from dotenv import load_dotenv
 from fastmcp import FastMCP
+from fastapi import FastAPI
 
 load_dotenv()
 
 MAPBOX_API_KEY = os.getenv("MAPBOX_API_KEY")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-# Initialize FastMCP
-mcp = FastMCP("weather-time-location")
+# Initialize FastAPI first
+app = FastAPI()
+
+# Add health check
+@app.get("/")
+def root():
+    return {"status": "Weather-Time-Location MCP Server online"}
+
+# Initialize FastMCP with the app
+mcp = FastMCP("weather-time-location", app=app)
 
 # --------- Helper functions ---------
 async def geocode(place: str):
@@ -20,13 +29,17 @@ async def geocode(place: str):
         url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{place}.json"
         params = {"access_token": MAPBOX_API_KEY, "limit": 1}
         async with httpx.AsyncClient() as client:
-            resp = await client.get(url, params=params)
-            data = resp.json()
-            if data.get("features"):
-                coords = data["features"][0]["geometry"]["coordinates"]
-                return coords[1], coords[0]
+            try:
+                resp = await client.get(url, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("features"):
+                    coords = data["features"][0]["geometry"]["coordinates"]
+                    return coords[1], coords[0]
+            except Exception:
+                pass
     
-    # Fallback to some hardcoded places
+    # Fallback to hardcoded places
     cities = {
         "buffalo": (42.8864, -78.8784),
         "toronto": (43.6532, -79.3832),
@@ -54,21 +67,19 @@ def parse_when(when: str):
         days = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
         if day in days:
             target = (days.index(day) - now.weekday() + 7) % 7
-            return now + timedelta(days=target or 7)
+            return now + timedelta(days=target if target > 0 else 7)
     
     # Check for time periods
     if "afternoon" in when:
         dt = parse_when(when.replace("afternoon", "").strip())
-        return dt.replace(hour=14, minute=0)
+        return dt.replace(hour=14, minute=0, second=0, microsecond=0)
     
-    # fallback: just return now
     return now
 
 async def fetch_weather(lat, lon, dt: datetime):
     if not OPENWEATHER_API_KEY:
         return {"error": "OpenWeatherMap API key missing"}
     
-    # Use the 2.5 API endpoint which is more reliable
     url = "https://api.openweathermap.org/data/2.5/forecast"
     params = {
         "lat": lat, 
@@ -80,12 +91,14 @@ async def fetch_weather(lat, lon, dt: datetime):
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(url, params=params)
+            resp.raise_for_status()
             data = resp.json()
             
             # If asking about today, use current weather endpoint
             if abs((dt - datetime.now()).days) < 1:
                 curr_url = "https://api.openweathermap.org/data/2.5/weather"
                 curr_resp = await client.get(curr_url, params=params)
+                curr_resp.raise_for_status()
                 curr_data = curr_resp.json()
                 
                 return {
@@ -124,16 +137,7 @@ async def fetch_weather(lat, lon, dt: datetime):
 # --------- MCP Tools ---------
 @mcp.tool()
 async def get_weather(place: str, when: str = "now") -> dict:
-    """
-    Get weather for a location and time.
-    
-    Args:
-        place: Location name (e.g., "Toronto", "Ottawa")
-        when: Time expression (e.g., "now", "next Monday", "next Saturday afternoon")
-    
-    Returns:
-        Weather information including temperature and conditions
-    """
+    """Get weather for a location and time."""
     coords = await geocode(place)
     if not coords:
         return {"error": f"Place '{place}' not found"}
@@ -151,15 +155,7 @@ async def get_weather(place: str, when: str = "now") -> dict:
 
 @mcp.tool()
 async def get_location(place: str) -> dict:
-    """
-    Get coordinates for a location.
-    
-    Args:
-        place: Location name
-    
-    Returns:
-        Latitude and longitude
-    """
+    """Get coordinates for a location."""
     coords = await geocode(place)
     if not coords:
         return {"error": f"Place '{place}' not found"}
@@ -173,16 +169,7 @@ async def get_location(place: str) -> dict:
 
 @mcp.tool()
 async def pack_for_weather(place: str, when: str = "now") -> dict:
-    """
-    Get packing suggestions based on weather.
-    
-    Args:
-        place: Destination
-        when: When you're going
-    
-    Returns:
-        Weather summary and packing suggestions
-    """
+    """Get packing suggestions based on weather."""
     weather = await get_weather(place, when)
     
     if "error" in weather:
@@ -221,7 +208,5 @@ async def pack_for_weather(place: str, when: str = "now") -> dict:
     
     return suggestions
 
-# Run the server
 if __name__ == "__main__":
-    # Run with the built-in FastMCP server
     mcp.run(transport="sse", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
