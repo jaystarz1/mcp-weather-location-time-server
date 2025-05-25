@@ -1,28 +1,23 @@
 import os
+import sys
 from datetime import datetime, timedelta
 import re
 import httpx
 from dotenv import load_dotenv
 from fastmcp import FastMCP
-from fastapi import FastAPI
 
 load_dotenv()
 
 MAPBOX_API_KEY = os.getenv("MAPBOX_API_KEY")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-app = FastAPI()
-mcp = FastMCP("weather-location-time", app=app)
+# Create MCP instance
+mcp = FastMCP("weather-location-time")
 
-# CRITICAL: Health check for Render
-@app.get("/")
-def root():
-    return {"status": "Weather MCP Server is running"}
-
-# CRITICAL: Health endpoint
-@app.get("/health")
-def health():
-    return {"status": "healthy"}
+# Add debug logging
+print(f"Starting MCP server...", file=sys.stderr)
+print(f"MAPBOX_API_KEY present: {bool(MAPBOX_API_KEY)}", file=sys.stderr)
+print(f"OPENWEATHER_API_KEY present: {bool(OPENWEATHER_API_KEY)}", file=sys.stderr)
 
 # Simple geocoding with fallback
 async def geocode(place: str):
@@ -37,8 +32,8 @@ async def geocode(place: str):
                     if data.get("features"):
                         coords = data["features"][0]["geometry"]["coordinates"]
                         return coords[1], coords[0]
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Geocoding error: {e}", file=sys.stderr)
     
     # Fallback cities
     cities = {
@@ -94,11 +89,14 @@ async def fetch_weather(lat, lon, dt: datetime):
                 }
             return {"error": f"Weather API returned {resp.status_code}"}
         except Exception as e:
+            print(f"Weather fetch error: {e}", file=sys.stderr)
             return {"error": str(e)}
 
 @mcp.tool()
 async def get_weather(place: str, when: str = "now") -> dict:
     """Get weather for a location and time."""
+    print(f"get_weather called: place={place}, when={when}", file=sys.stderr)
+    
     coords = await geocode(place)
     if not coords:
         return {"error": f"Place '{place}' not found"}
@@ -117,6 +115,8 @@ async def get_weather(place: str, when: str = "now") -> dict:
 @mcp.tool()
 async def get_location(place: str) -> dict:
     """Get coordinates for a location."""
+    print(f"get_location called: place={place}", file=sys.stderr)
+    
     coords = await geocode(place)
     if not coords:
         return {"error": f"Place '{place}' not found"}
@@ -131,6 +131,8 @@ async def get_location(place: str) -> dict:
 @mcp.tool()
 async def pack_for_weather(place: str, when: str = "now") -> dict:
     """Get packing suggestions based on weather."""
+    print(f"pack_for_weather called: place={place}, when={when}", file=sys.stderr)
+    
     weather = await get_weather(place, when)
     
     if "error" in weather:
@@ -167,6 +169,14 @@ async def pack_for_weather(place: str, when: str = "now") -> dict:
     
     return suggestions
 
-# CRITICAL: This is what actually starts the server
+# This is the key - we need to run the MCP server directly
 if __name__ == "__main__":
-    mcp.run(transport="sse", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    port = int(os.environ.get("PORT", 8000))
+    print(f"Starting server on port {port}", file=sys.stderr)
+    
+    # Run with SSE transport
+    mcp.run(
+        transport="sse",
+        host="0.0.0.0",
+        port=port
+    )
