@@ -4,14 +4,13 @@ import re
 import httpx
 from dotenv import load_dotenv
 from fastmcp import FastMCP
-from fastapi import FastAPI
 
 load_dotenv()
 
 MAPBOX_API_KEY = os.getenv("MAPBOX_API_KEY")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-app = FastAPI()
+mcp = FastMCP("weather-time-location")
 
 @app.get("/")
 def root():
@@ -196,4 +195,4 @@ async def pack_for_weather(place: str, when: str = "now") -> dict:
    return suggestions
 
 if __name__ == "__main__":
-   mcp.run(transport="sse", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    mcp.run(transport="sse", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
